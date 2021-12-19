@@ -1,0 +1,127 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Jacques Cherbuin"
+date: "18/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Introduction
+
+In this report we will create a machine learning algorithm to predict personal activity. First, we will load and prepare the data. Second, we will test different models and optimise them on the training and validation sets. Finally, we will show the results of the model building process and use the best model to predict on the test set.
+
+## 2. Data Preprocessing
+
+### 2.1 Load Packages
+We load the required packages:
+```{r}
+library(caret)
+library(RColorBrewer)
+library(doParallel)
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+```
+
+
+### 2.2 Set Seed
+We set the seed for reproducibility:
+```{r}
+set.seed(123)
+```
+
+
+### 2.3 Load Data
+
+We download the data and store it in training and test variables:
+```{r}
+url_training <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+url_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training <- read.csv(url(url_training), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(url_test), na.strings=c("NA","#DIV/0!",""))
+```
+
+### 2.3 Clean Data
+Remove columns with NA values and irrelevant variables:
+```{r}
+training <- training[,colSums(is.na(training))==0]
+training <- training[,-(1:7)]
+testing <- testing[,colSums(is.na(testing))==0]
+testing <- testing[,-(1:7)]
+```
+
+### 2.4 Split into Training and Validation Sets
+
+Split training set into training set and validation set to estimate out of sample error:
+```{r}
+in_training <- createDataPartition(training$classe,p=0.7, list = FALSE)
+validation <- training[-in_training,]
+training <- training[in_training,]
+```
+
+## 3. Model Building
+
+We will build 3 different models and then we will use the validation set to choose the best performing model.
+
+### 3.1 Random Forest
+
+We create the random forest model, predict on the validation set, and get the confusion matrix to judge accuracy:
+```{r, cache=TRUE}
+rf_model <- train(classe~., preProcess=c('center','scale'), data = training,method="rf")
+rf_prediction <- predict(rf_model, validation)
+rf_confusion <- confusionMatrix(rf_prediction, factor(validation$classe))
+```
+
+### 3.2 Boosted Gradient Machine
+
+We create the boosted gradient machine model, predict on the validation set, and get the confusion matrix to judge accuracy:
+```{r, cache=TRUE}
+gbm_model <- train(classe~., preProcess=c('center','scale'), data = training,method="gbm", verbose = FALSE)
+gbm_prediction <- predict(gbm_model, validation)
+gbm_confusion <- confusionMatrix(gbm_prediction, factor(validation$classe))
+```
+### 3.3 Linear Disciriminant Analysis
+
+We create the linear discriminant analysis model, predict on the validation set, and get the confusion matrix to judge accuracy:
+```{r, cache=TRUE}
+lda_model <- train(classe~.,preProcess=c('center','scale'), data = training,method="lda")
+lda_prediction <- predict(lda_model, validation)
+lda_confusion <- confusionMatrix(lda_prediction, factor(validation$classe))
+```
+
+
+
+## 4. Results
+
+We show the results of our 3 models on the validation data:
+
+```{r}
+paste("Random Forest Accuracy:            ", round(rf_confusion$overall['Accuracy'],5))
+paste("Gradient Boosted Machine Accuracy: ", round(gbm_confusion$overall['Accuracy'],5))
+paste("Linear Disciriminant Analysis Accuracy:   ", round(lda_confusion$overall['Accuracy'],5))
+```
+
+We plot the accuracy of our three models on the validation data:
+
+```{r}
+accuracy <- c(rf_confusion$overall['Accuracy'],gbm_confusion$overall['Accuracy'],lda_confusion$overall['Accuracy'])
+par(mar=c(4,6,3,3), cex=0.8)
+barplot(accuracy, names.arg =c('Random Forest', 'Gradient Boosted Machine', 'Linear Discriminant Analysis'), main = 'Model Accuracy',ylab = "Accuracy", col=brewer.pal(9,"Greens")[3:9])
+```
+
+
+
+
+The model with the highest accuracy is the random forest model. We will choose this model and apply it to the test set:
+
+```{r}
+rf_testing_prediction <- predict(rf_model, testing)
+par(mar=c(4,6,3,3), cex=0.8)
+plot(rf_testing_prediction, col=brewer.pal(9,'Blues')[3:9], main = 'Final Model Predictions',ylab = 'Frequency')
+
+```
+
+
+
